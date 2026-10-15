@@ -1,6 +1,6 @@
 from flask import Flask, jsonify
 from .config import Settings
-from .extensions import db, jwt
+from .extensions import db, jwt, redis_client
 from .routes import register_routes
 from .observability import (
     Observability,
@@ -44,6 +44,17 @@ def create_app(settings: Settings | None = None) -> Flask:
     # Extensions
     db.init_app(app)
     jwt.init_app(app)
+
+    @jwt.token_in_blocklist_loader
+    def _check_if_token_revoked(_jwt_header, jwt_payload: dict) -> bool:
+        jti = jwt_payload.get("jti")
+        sub = jwt_payload.get("sub")
+        if jti and redis_client.get(f"auth:revoked_token:{jti}"):
+            return True
+        if sub is not None and redis_client.get(f"auth:deleted_user:{sub}"):
+            return True
+        return False
+
     app.extensions["observability"] = Observability()
     # CORS for local dev frontend
     CORS(app, resources={r"*": {"origins": "*"}}, supports_credentials=True)
@@ -107,14 +118,33 @@ def _ensure_schema_compatibility(app: Flask) -> None:
             """
             ALTER TABLE users
             ADD COLUMN IF NOT EXISTS preferred_currency VARCHAR(10)
-            NOT NULL DEFAULT 'INR'
+            NOT NULL DEFAULT 'INR';
+            ALTER TABLE audit_logs
+            ADD COLUMN IF NOT EXISTS subject_hash VARCHAR(64);
+            ALTER TABLE audit_logs
+            ADD COLUMN IF NOT EXISTS details TEXT;
+            ALTER TABLE audit_logs
+            ADD COLUMN IF NOT EXISTS checksum VARCHAR(64);
+            CREATE TABLE IF NOT EXISTS weekly_digests (
+              id SERIAL PRIMARY KEY,
+              user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+              week_start DATE NOT NULL,
+              week_end DATE NOT NULL,
+              currency VARCHAR(10) NOT NULL DEFAULT 'INR',
+              total_income NUMERIC(12,2) NOT NULL DEFAULT 0,
+              total_expenses NUMERIC(12,2) NOT NULL DEFAULT 0,
+              net_flow NUMERIC(12,2) NOT NULL DEFAULT 0,
+              wow_change_pct DOUBLE PRECISION NOT NULL DEFAULT 0,
+              trend_direction VARCHAR(20) NOT NULL DEFAULT 'STABLE',
+              spikes_count INT NOT NULL DEFAULT 0,
+              payload_json TEXT NOT NULL,
+              created_at TIMESTAMP NOT NULL DEFAULT NOW()
+            );
             """
         )
         conn.commit()
     except Exception:
-        app.logger.exception(
-            "Schema compatibility patch failed for users.preferred_currency"
-        )
+        app.logger.exception("Schema compatibility patch failed")
         conn.rollback()
     finally:
         conn.close()

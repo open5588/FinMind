@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ include "finmind.namespace" . }}
+  labels:
+    name: {{ include "finmind.namespace" . }}
+    {{- include "finmind.labels" . | nindent 4 }}

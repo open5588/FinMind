@@ -7,6 +7,8 @@ from .insights import bp as insights_bp
 from .categories import bp as categories_bp
 from .docs import bp as docs_bp
 from .dashboard import bp as dashboard_bp
+from .privacy import bp as privacy_bp
+from .digests import bp as digests_bp
 
 
 def register_routes(app: Flask):
@@ -18,3 +20,7 @@ def register_routes(app: Flask):
     app.register_blueprint(categories_bp, url_prefix="/categories")
     app.register_blueprint(docs_bp, url_prefix="/docs")
     app.register_blueprint(dashboard_bp, url_prefix="/dashboard")
+    app.register_blueprint(privacy_bp, url_prefix="/api/privacy")
+    app.register_blueprint(privacy_bp, url_prefix="/privacy", name="privacy_root")
+    app.register_blueprint(digests_bp, url_prefix="/api/digests")
+    app.register_blueprint(digests_bp, url_prefix="/digests", name="digests_root")

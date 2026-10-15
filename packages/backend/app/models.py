@@ -1,6 +1,6 @@
 from datetime import datetime, date
 from enum import Enum
-from sqlalchemy import Enum as SAEnum
+from sqlalchemy import Enum as SAEnum, event, inspect
 from .extensions import db
 
 
@@ -130,6 +130,46 @@ class UserSubscription(db.Model):
 class AuditLog(db.Model):
     __tablename__ = "audit_logs"
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    subject_hash = db.Column(db.String(64), nullable=True)
     action = db.Column(db.String(100), nullable=False)
+    details = db.Column(db.Text, nullable=True)
+    checksum = db.Column(db.String(64), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+
+@event.listens_for(AuditLog, "before_delete")
+def _prevent_audit_log_delete(_mapper, _connection, _target):
+    raise ValueError("AuditLog entries are immutable and cannot be deleted")
+
+
+@event.listens_for(AuditLog, "before_update")
+def _prevent_audit_log_update(_mapper, _connection, target):
+    state = inspect(target)
+    immutable_fields = ("action", "subject_hash", "details", "checksum", "created_at")
+    for field in immutable_fields:
+        if state.attrs[field].history.has_changes():
+            raise ValueError(f"AuditLog entries are immutable: cannot modify '{field}'")
+    if state.attrs["user_id"].history.has_changes() and target.user_id is not None:
+        raise ValueError("AuditLog user_id can only be anonymized to None")
+
+
+class WeeklyDigest(db.Model):
+    __tablename__ = "weekly_digests"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    week_start = db.Column(db.Date, nullable=False)
+    week_end = db.Column(db.Date, nullable=False)
+    currency = db.Column(db.String(10), default="INR", nullable=False)
+    total_income = db.Column(db.Numeric(12, 2), default=0, nullable=False)
+    total_expenses = db.Column(db.Numeric(12, 2), default=0, nullable=False)
+    net_flow = db.Column(db.Numeric(12, 2), default=0, nullable=False)
+    wow_change_pct = db.Column(db.Float, default=0.0, nullable=False)
+    trend_direction = db.Column(db.String(20), default="STABLE", nullable=False)
+    spikes_count = db.Column(db.Integer, default=0, nullable=False)
+    payload_json = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)

@@ -1,0 +1,12 @@
+version: 1.0
+runtime: python311
+build:
+  commands:
+    build:
+      - pip install -r packages/backend/requirements.txt
+run:
+  runtime-version: 3.11
+  command: sh -c "cd packages/backend && python -m flask --app wsgi:app init-db && gunicorn -w 2 -k gthread -b 0.0.0.0:8000 wsgi:app"
+  network:
+    port: 8000
+    env: PORT

@@ -1,0 +1,54 @@
+services:
+  - type: web
+    name: finmind-backend
+    runtime: docker
+    dockerfilePath: ./packages/backend/Dockerfile
+    dockerContext: ./packages/backend
+    plan: free
+    healthCheckPath: /health
+    dockerCommand: sh -c "python -m flask --app wsgi:app init-db && gunicorn --workers=2 --threads=4 --bind 0.0.0.0:${PORT:-8000} wsgi:app"
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: finmind-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: finmind-redis
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: LOG_LEVEL
+        value: INFO
+      - key: GEMINI_MODEL
+        value: gemini-1.5-flash
+
+  - type: web
+    name: finmind-frontend
+    runtime: static
+    rootDir: app
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          type: web
+          name: finmind-backend
+          envVarKey: RENDER_EXTERNAL_URL
+
+  - type: redis
+    name: finmind-redis
+    plan: free
+    ipAllowList: []
+    maxmemoryPolicy: allkeys-lru
+
+databases:
+  - name: finmind-postgres
+    databaseName: finmind
+    user: finmind
+    plan: free

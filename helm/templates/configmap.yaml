@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: finmind-config
+  namespace: {{ include "finmind.namespace" . }}
+  labels:
+    {{- include "finmind.labels" . | nindent 4 }}
+data:
+  LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  GEMINI_MODEL: {{ .Values.config.geminiModel | quote }}
+  REDIS_URL: {{ .Values.config.redisUrl | quote }}

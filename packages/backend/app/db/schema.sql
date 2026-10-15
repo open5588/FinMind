@@ -120,6 +120,33 @@ CREATE TABLE IF NOT EXISTS user_subscriptions (
 CREATE TABLE IF NOT EXISTS audit_logs (
   id SERIAL PRIMARY KEY,
   user_id INT REFERENCES users(id) ON DELETE SET NULL,
+  subject_hash VARCHAR(64),
   action VARCHAR(100) NOT NULL,
+  details TEXT,
+  checksum VARCHAR(64),
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE audit_logs
+  ADD COLUMN IF NOT EXISTS subject_hash VARCHAR(64);
+ALTER TABLE audit_logs
+  ADD COLUMN IF NOT EXISTS details TEXT;
+ALTER TABLE audit_logs
+  ADD COLUMN IF NOT EXISTS checksum VARCHAR(64);
+
+CREATE TABLE IF NOT EXISTS weekly_digests (
+  id SERIAL PRIMARY KEY,
+  user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  week_start DATE NOT NULL,
+  week_end DATE NOT NULL,
+  currency VARCHAR(10) NOT NULL DEFAULT 'INR',
+  total_income NUMERIC(12,2) NOT NULL DEFAULT 0,
+  total_expenses NUMERIC(12,2) NOT NULL DEFAULT 0,
+  net_flow NUMERIC(12,2) NOT NULL DEFAULT 0,
+  wow_change_pct DOUBLE PRECISION NOT NULL DEFAULT 0,
+  trend_direction VARCHAR(20) NOT NULL DEFAULT 'STABLE',
+  spikes_count INT NOT NULL DEFAULT 0,
+  payload_json TEXT NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_weekly_digests_user_week ON weekly_digests(user_id, week_start DESC);

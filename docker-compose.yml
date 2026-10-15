@@ -17,17 +17,27 @@ services:
   redis:
     image: redis:7
     ports: ["6379:6379"]
+    volumes: ["redisdata:/data"]
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   backend:
     build: ./packages/backend
     env_file:
       - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://finmind:finmind@postgres:5432/finmind}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production-32chars}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     ports: ["8000:8000"]
     volumes:
       - ./packages/backend/app:/app/app
@@ -37,14 +47,43 @@ services:
       - ./.bandit:/app/.bandit:ro
     command: sh -c "python -m flask --app wsgi:app init-db && export PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus_multiproc && rm -rf $$PROMETHEUS_MULTIPROC_DIR && mkdir -p $$PROMETHEUS_MULTIPROC_DIR && gunicorn --reload --workers=2 --threads=4 --bind 0.0.0.0:8000 wsgi:app"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  frontend:
+    build:
+      context: ./app
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports: ["4173:80"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:80/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
 
   nginx:
     image: nginx:1.27-alpine
-    depends_on: [backend]
+    depends_on:
+      backend:
+        condition: service_healthy
     ports: ["8080:80"]
     volumes:
       - ./monitoring/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:80/nginx_status"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
 
   frontend-dev:
     image: node:20-alpine
@@ -128,7 +167,9 @@ services:
     image: oliver006/redis_exporter:v1.63.0
     environment:
       REDIS_ADDR: redis://redis:6379
-    depends_on: [redis]
+    depends_on:
+      redis:
+        condition: service_healthy
     restart: unless-stopped
 
   nginx-exporter:
@@ -140,6 +181,7 @@ services:
 
 volumes:
   pgdata:
+  redisdata:
   prometheus-data:
   loki-data:
   grafana-data:

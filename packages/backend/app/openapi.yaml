@@ -12,6 +12,8 @@ tags:
   - name: Bills
   - name: Reminders
   - name: Insights
+  - name: Privacy
+  - name: Digests
 paths:
   /auth/register:
     post:
@@ -480,6 +482,39 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+
+  /api/privacy/export:
+    get:
+      summary: Export all personal data (GDPR Article 15 & 20)
+      tags: [Privacy]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Complete GDPR PII export package with SHA-256 integrity checksum
+  /api/privacy/delete:
+    post:
+      summary: Irreversibly delete user account and all personal data (GDPR Article 17)
+      tags: [Privacy]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Deletion receipt with anonymized immutable audit trail entry
+  /api/digests/weekly:
+    get:
+      summary: Retrieve weekly financial summary with trend and spike analysis
+      tags: [Digests]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Weekly digest with WoW trends, category breakdown, and spikes
+  /api/digests/generate:
+    post:
+      summary: Generate and persist weekly financial summary digest
+      tags: [Digests]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '201':
+          description: Generated and persisted weekly digest
 
 components:
   securitySchemes:
